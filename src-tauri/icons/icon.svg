@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- 图标源文件：修改后执行 `bun tauri icon src-tauri/icons/icon.svg` 重新生成（会顺带生成 android/ios 目录，删掉即可） -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#10B981" />
+
+  <!-- 兔头剪影：两只耳朵 + 头 -->
+  <g fill="#FFFFFF">
+    <rect x="378" y="220" width="116" height="340" rx="58" transform="rotate(-10 436 540)" />
+    <rect x="530" y="220" width="116" height="340" rx="58" transform="rotate(10 588 540)" />
+    <circle cx="512" cy="620" r="200" />
+  </g>
+
+  <!-- 眼睛 -->
+  <circle cx="444" cy="610" r="26" fill="#10B981" />
+  <circle cx="580" cy="610" r="26" fill="#10B981" />
+</svg>

@@ -86,6 +86,14 @@ fn setup_tray(app: &tauri::App, enabled: bool) -> tauri::Result<()> {
             "quit" => app.exit(0),
             _ => {}
         });
+    // macOS 用单色模板图标，随菜单栏明暗自动变色；Windows 托盘不支持模板图标，沿用彩色应用图标
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray
+            .icon(tauri::include_image!("icons/tray.png"))
+            .icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

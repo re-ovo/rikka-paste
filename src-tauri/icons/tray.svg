@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="192 196 640 640">
+  <!-- macOS 菜单栏模板图标源文件（黑色 + 透明，系统会自动适配明暗）
+       修改后执行 `bun tauri icon src-tauri/icons/tray.svg -o <临时目录> -p 64`，将 64x64.png 复制为 src-tauri/icons/tray.png -->
+  <mask id="rabbit">
+    <g fill="#FFFFFF">
+      <rect x="378" y="220" width="116" height="340" rx="58" transform="rotate(-10 436 540)" />
+      <rect x="530" y="220" width="116" height="340" rx="58" transform="rotate(10 588 540)" />
+      <circle cx="512" cy="620" r="200" />
+    </g>
+    <circle cx="444" cy="610" r="30" fill="#000000" />
+    <circle cx="580" cy="610" r="30" fill="#000000" />
+  </mask>
+  <rect x="192" y="196" width="640" height="640" fill="#000000" mask="url(#rabbit)" />
+</svg>
