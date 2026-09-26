@@ -10,9 +10,12 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Manager, RunEvent, State, WindowEvent, Wry,
 };
+use tauri_plugin_opener::OpenerExt;
 
 use config::Config;
 use sync::{Engine, Snapshot};
+
+const RELEASES_URL: &str = "https://github.com/re-ovo/rikka-paste/releases/";
 
 struct TrayToggle(CheckMenuItem<Wry>);
 
@@ -44,6 +47,17 @@ fn copy_secret(text: String) -> Result<(), String> {
         &clipboard::Content::Text(text),
         clipboard::WriteMode::Concealed,
     )
+}
+
+/// 用系统浏览器打开新版本的 Release 页面；只接受本项目的链接
+#[tauri::command]
+fn open_release(app: AppHandle, url: String) -> Result<(), String> {
+    if !url.starts_with(RELEASES_URL) {
+        return Err("不支持打开该链接".into());
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 fn sync_tray(app: &AppHandle) {
@@ -107,11 +121,13 @@ fn setup_tray(app: &tauri::App, enabled: bool) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_state,
             update_config,
             generate_key,
-            copy_secret
+            copy_secret,
+            open_release
         ])
         .setup(|app| {
             // 常驻托盘，不占 Dock

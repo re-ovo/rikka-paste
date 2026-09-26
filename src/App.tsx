@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -126,6 +127,7 @@ function App() {
         </section>
 
         <div className="mx-auto flex max-w-xl flex-col gap-4 p-4">
+          <UpdateBanner />
           <Card title={`局域网设备 · ${peers.length}`}>
             {peers.length === 0 ? (
               <p className="py-2 text-zinc-500">正在查找运行 Rikka Paste 的设备…</p>
@@ -192,6 +194,76 @@ function App() {
           </Card>
         </div>
       </main>
+    </div>
+  );
+}
+
+const RELEASES_API = "https://api.github.com/repos/re-ovo/rikka-paste/releases/latest";
+const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000;
+const IGNORED_UPDATE_KEY = "ignoredUpdate";
+
+type Update = { version: string; url: string };
+
+/// 比较 x.y.z 形式的版本号，忽略前缀 v 和预发布后缀
+function isNewer(latest: string, current: string) {
+  const parse = (v: string) => v.replace(/^v/, "").split("-")[0].split(".").map(Number);
+  const [a, b] = [parse(latest), parse(current)];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff) return diff > 0;
+  }
+  return false;
+}
+
+function readIgnored() {
+  try {
+    return localStorage.getItem(IGNORED_UPDATE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/// 启动时及之后每 6 小时查一次 GitHub 最新 Release，只提示不自动安装；网络失败时静默
+function UpdateBanner() {
+  const [update, setUpdate] = useState<Update | null>(null);
+  const [ignored, setIgnored] = useState(readIgnored);
+
+  useEffect(() => {
+    async function check() {
+      try {
+        const res = await fetch(RELEASES_API, { headers: { Accept: "application/vnd.github+json" } });
+        if (!res.ok) return;
+        const release: { tag_name: string; html_url: string } = await res.json();
+        if (isNewer(release.tag_name, await getVersion())) {
+          setUpdate({ version: release.tag_name.replace(/^v/, ""), url: release.html_url });
+        }
+      } catch {
+        // 离线或被限流，下次再查
+      }
+    }
+    check();
+    const timer = setInterval(check, UPDATE_CHECK_INTERVAL);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!update || update.version === ignored) return null;
+
+  function ignore() {
+    try {
+      localStorage.setItem(IGNORED_UPDATE_KEY, update!.version);
+    } catch {
+      // 存不下来就只在本次运行内忽略
+    }
+    setIgnored(update!.version);
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 py-2 pr-2 pl-4 dark:border-sky-900 dark:bg-sky-950/50">
+      <p className="flex-1 text-sky-800 dark:text-sky-200">发现新版本 v{update.version}</p>
+      <TextButton onClick={ignore}>忽略</TextButton>
+      <Button primary onClick={() => invoke("open_release", { url: update.url })}>
+        下载
+      </Button>
     </div>
   );
 }
