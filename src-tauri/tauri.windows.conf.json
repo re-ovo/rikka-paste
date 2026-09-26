@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Rikka Paste",
+        "width": 420,
+        "height": 640,
+        "minWidth": 360,
+        "minHeight": 480,
+        "decorations": false
+      }
+    ]
+  }
+}

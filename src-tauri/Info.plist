@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Rikka Paste 需要访问局域网来发现其他设备并同步剪贴板。</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_rikkapaste._tcp</string>
+  </array>
+</dict>
+</plist>
