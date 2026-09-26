@@ -9,9 +9,10 @@ type Config = {
   syncKey: string;
   enabled: boolean;
   recordHistory: boolean;
+  syncImages: boolean;
 };
 
-type Peer = { id: string; name: string; addr: string; matched: boolean };
+type Peer = { id: string; name: string; addr: string; compatible: boolean; matched: boolean };
 
 type LogEntry = {
   ts: number;
@@ -139,7 +140,9 @@ function App() {
                     {p.matched ? (
                       <span className="font-mono text-xs text-zinc-500">{p.addr}</span>
                     ) : (
-                      <span className="text-xs text-amber-600 dark:text-amber-400">配对码不同</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                        {p.compatible ? "配对码不同" : "版本不兼容"}
+                      </span>
                     )}
                   </li>
                 ))}
@@ -148,6 +151,13 @@ function App() {
           </Card>
 
           <Card title="选项">
+            <label className="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p>同步图片</p>
+                <p className="text-xs text-zinc-500">截图、复制的图片会以 PNG 发送，单张不超过 32 MB</p>
+              </div>
+              <Switch checked={config.syncImages} onChange={(syncImages) => apply({ syncImages })} />
+            </label>
             <label className="flex cursor-pointer items-start justify-between gap-4">
               <div>
                 <p>记入剪贴板历史</p>

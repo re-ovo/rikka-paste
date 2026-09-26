@@ -37,6 +37,16 @@ opt-level = 3
 [profile.dev.package.blake2]
 opt-level = 3
 
+# 图片可达几十 MB，debug 构建下加解密和 PNG 编解码同样需要优化
+[profile.dev.package.chacha20]
+opt-level = 3
+
+[profile.dev.package.poly1305]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
@@ -52,3 +62,4 @@ objc2-foundation = "0.3.2"
 
 [target."cfg(windows)".dependencies]
 clipboard-win = "5.4.1"
+image = { version = "0.25.10", default-features = false, features = ["png", "bmp"] }

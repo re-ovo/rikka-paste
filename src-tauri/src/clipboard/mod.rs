@@ -1,4 +1,6 @@
-//! 系统剪贴板的最小抽象：只关心纯文本，以及剪贴板管理器通用的"敏感/临时"标记。
+//! 系统剪贴板的最小抽象：只关心纯文本和图片（统一为 PNG），以及剪贴板管理器通用的"敏感/临时"标记。
+//!
+//! 剪贴板里同时有文本和图片时只取文本：Office 等应用复制文字时也会附带一张渲染图。
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -10,11 +12,26 @@ mod windows;
 #[cfg(windows)]
 use windows as imp;
 
-pub enum Read {
+pub enum Content {
     Text(String),
+    /// PNG 编码的图片
+    Png(Vec<u8>),
+}
+
+impl Content {
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Content::Text(text) => text.as_bytes(),
+            Content::Png(png) => png,
+        }
+    }
+}
+
+pub enum Read {
+    Content(Content),
     /// 带有敏感/临时标记（密码管理器等），不应同步
     Sensitive,
-    /// 没有文本内容
+    /// 没有文本或图片
     Empty,
     /// 剪贴板暂时被其他程序占用，稍后重试（仅 Windows）
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -40,6 +57,6 @@ pub fn read() -> Read {
     imp::read()
 }
 
-pub fn write_text(text: &str, mode: WriteMode) -> Result<(), String> {
-    imp::write_text(text, mode)
+pub fn write(content: &Content, mode: WriteMode) -> Result<(), String> {
+    imp::write(content, mode)
 }

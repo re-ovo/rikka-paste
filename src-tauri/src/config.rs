@@ -12,6 +12,7 @@ pub struct Config {
     pub enabled: bool,
     /// 远端同步来的内容是否进入本机剪贴板历史（Maccy / Win+V）
     pub record_history: bool,
+    pub sync_images: bool,
 }
 
 impl Default for Config {
@@ -22,6 +23,7 @@ impl Default for Config {
             sync_key: generate_key(),
             enabled: true,
             record_history: true,
+            sync_images: true,
         }
     }
 }

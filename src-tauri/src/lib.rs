@@ -40,7 +40,10 @@ fn generate_key() -> String {
 /// 以"敏感内容"写入剪贴板：不会被同步，也不会进入 Maccy / Win+V 历史
 #[tauri::command]
 fn copy_secret(text: String) -> Result<(), String> {
-    clipboard::write_text(&text, clipboard::WriteMode::Concealed)
+    clipboard::write(
+        &clipboard::Content::Text(text),
+        clipboard::WriteMode::Concealed,
+    )
 }
 
 fn sync_tray(app: &AppHandle) {
