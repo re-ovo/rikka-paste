@@ -29,7 +29,7 @@ cargo test --manifest-path src-tauri/Cargo.toml message_roundtrip    # 单个测
 1. **发现**：mDNS 注册 `_rikkapaste._tcp.local.`，TXT 记录携带 `id`、`name`、`fp`（配对码派生密钥的指纹）、`v`（协议版本）。另开线程接收 browse 事件维护 `peers`。
 2. **发送**：独立线程每 300ms 轮询 `clipboard::change_count()`，变化时 `clipboard::read()`，把内容封装成消息、加密，对每个"协议版本一致且指纹一致"的 peer 各开一个 TCP 短连接发送。
 3. **接收**：tokio TcpListener（随机端口，通过 mDNS 公布）读帧，在 `spawn_blocking` 中解密、校验时间戳（±5 分钟）、写入本地剪贴板。
-4. **UI 同步**：每次状态变化 `emit("state-changed", Snapshot)` 推送完整快照；前端（`src/App.tsx`，单文件）只通过 `get_state` / `update_config` / `generate_key` / `copy_secret` / `open_release` 这几个命令和事件交互，不自己轮询。
+4. **UI 同步**：每次状态变化 `emit("state-changed", Snapshot)` 推送完整快照；前端（`src/App.tsx`，单文件）只通过 `get_state` / `update_config` / `generate_key` / `copy_secret` / `open_release` / `get_autostart` / `set_autostart` 这几个命令和事件交互，不自己轮询。
 
 ### 需要跨文件理解的约束
 
@@ -38,5 +38,6 @@ cargo test --manifest-path src-tauri/Cargo.toml message_roundtrip    # 单个测
 - **敏感/临时标记**：`clipboard/mod.rs` 定义了跨平台抽象（`Content`、`Read`、`WriteMode`），平台实现分别遵循 nspasteboard.org 约定（macOS）和 Windows 剪贴板历史排除格式。带敏感标记的内容读取时返回 `Read::Sensitive`，不会同步；`copy_secret` 用 `Concealed` 写入配对码。剪贴板同时有文本和图片时只取文本。图片统一以 PNG 传输（macOS 的 TIFF、Windows 的 CF_DIB 在读取时转码，Windows 写入时同时写 PNG 和 CF_DIB）。
 - **Rust ↔ TS 类型需手动同步**：`Config`、`Snapshot`、`PeerView`、`LogEntry` 用 `serde(rename_all = "camelCase")` 序列化，`src/App.tsx` 顶部有对应的 TS 类型。`Config` 带 `#[serde(default)]`，新增字段对已有 `config.json` 向后兼容。
 - **新增 Tauri 命令**要加到 `lib.rs` 的 `generate_handler!`；前端需要的窗口 API 权限要加到 `src-tauri/capabilities/default.json`。
+- **开机自启**：用 `tauri-plugin-autostart`（macOS 为 LaunchAgent），状态以系统登录项为准，不存进 `Config`。自启时带 `--autostart` 参数；窗口在两份 `tauri*.conf.json` 里都是 `visible: false`，`setup` 中没有该参数时才显示。
 - **窗口/平台差异**：关闭窗口只是隐藏（同步在后台继续），macOS 使用 Accessory 激活策略不占 Dock。macOS 用 Overlay 标题栏，`tauri.windows.conf.json` 在 Windows 上关闭系统装饰，由前端 `TitleBar` 自绘。`src-tauri/Info.plist` 中的 `NSBonjourServices` 必须与 `SERVICE_TYPE` 保持一致，否则 macOS 本地网络权限下无法发现设备。
 - `Cargo.toml` 对 argon2、chacha20、poly1305、sha2 等在 dev profile 下单独开了 `opt-level = 3`（64 MiB Argon2 派生和大图加解密在未优化构建下很慢），不要删掉。

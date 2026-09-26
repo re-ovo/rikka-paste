@@ -10,12 +10,15 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Manager, RunEvent, State, WindowEvent, Wry,
 };
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_opener::OpenerExt;
 
 use config::Config;
 use sync::{Engine, Snapshot};
 
 const RELEASES_URL: &str = "https://github.com/re-ovo/rikka-paste/releases/";
+/// 开机自启时附带的参数，带上它启动时只驻留托盘、不弹出窗口
+const AUTOSTART_ARG: &str = "--autostart";
 
 struct TrayToggle(CheckMenuItem<Wry>);
 
@@ -58,6 +61,24 @@ fn open_release(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+/// 以系统登录项为准，不存进 config.json，避免用户在系统设置里删掉后两边不一致
+#[tauri::command]
+fn get_autostart(app: AppHandle) -> Result<bool, String> {
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    let autolaunch = app.autolaunch();
+    let result = if enabled {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
+    result.map_err(|e| format!("设置开机自启失败: {e}"))?;
+    autolaunch.is_enabled().map_err(|e| e.to_string())
 }
 
 fn sync_tray(app: &AppHandle) {
@@ -122,12 +143,18 @@ fn setup_tray(app: &tauri::App, enabled: bool) -> tauri::Result<()> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![AUTOSTART_ARG]),
+        ))
         .invoke_handler(tauri::generate_handler![
             get_state,
             update_config,
             generate_key,
             copy_secret,
-            open_release
+            open_release,
+            get_autostart,
+            set_autostart
         ])
         .setup(|app| {
             // 常驻托盘，不占 Dock
@@ -139,6 +166,11 @@ pub fn run() {
             let enabled = engine.config().enabled;
             app.manage(engine);
             setup_tray(app, enabled)?;
+
+            // 窗口在配置里默认隐藏，手动打开时才显示，避免开机自启时闪一下
+            if !std::env::args().any(|arg| arg == AUTOSTART_ARG) {
+                show_main_window(app.handle());
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

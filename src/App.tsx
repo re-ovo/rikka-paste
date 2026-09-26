@@ -37,8 +37,10 @@ function App() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [autostart, setAutostart] = useState(false);
 
   useEffect(() => {
+    invoke<boolean>("get_autostart").then(setAutostart, (e) => setError(String(e)));
     invoke<Snapshot>("get_state").then((s) => {
       setSnapshot(s);
       setName(s.config.deviceName);
@@ -62,6 +64,15 @@ function App() {
       setSnapshot(s);
       setName(s.config.deviceName);
       setKey(s.config.syncKey);
+      setError("");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function toggleAutostart(enabled: boolean) {
+    try {
+      setAutostart(await invoke<boolean>("set_autostart", { enabled }));
       setError("");
     } catch (e) {
       setError(String(e));
@@ -153,6 +164,13 @@ function App() {
           </Card>
 
           <Card title="选项">
+            <label className="flex cursor-pointer items-start justify-between gap-4">
+              <div>
+                <p>开机自启</p>
+                <p className="text-xs text-zinc-500">登录后在后台启动，只显示托盘图标</p>
+              </div>
+              <Switch checked={autostart} onChange={toggleAutostart} />
+            </label>
             <label className="flex cursor-pointer items-start justify-between gap-4">
               <div>
                 <p>同步图片</p>

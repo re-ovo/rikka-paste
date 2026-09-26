@@ -29,6 +29,7 @@ sha2 = "0.11.0"
 rand = "0.10.3"
 gethostname = "1.1.0"
 tauri-plugin-opener = "2.5.5"
+tauri-plugin-autostart = "2.5.1"
 
 
 # debug 构建下 argon2 太慢（64 MiB 派生要好几秒），单独开优化
