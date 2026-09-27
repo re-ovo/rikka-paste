@@ -4,6 +4,7 @@
     "windows": [
       {
         "title": "Rikka Paste",
+        "create": false,
         "width": 420,
         "height": 640,
         "minWidth": 360,
