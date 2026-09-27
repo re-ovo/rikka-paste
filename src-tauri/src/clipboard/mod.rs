@@ -12,6 +12,13 @@ mod windows;
 #[cfg(windows)]
 use windows as imp;
 
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(target_os = "android")]
+use android as imp;
+#[cfg(target_os = "android")]
+pub use android::plugin;
+
 pub enum Content {
     Text(String),
     /// PNG 编码的图片
@@ -48,7 +55,8 @@ pub enum WriteMode {
     Concealed,
 }
 
-/// 每次剪贴板内容变化都会递增的计数
+/// 每次剪贴板内容变化都会递增的计数。Android 不能在后台读剪贴板，没有这个概念
+#[cfg(desktop)]
 pub fn change_count() -> u64 {
     imp::change_count()
 }

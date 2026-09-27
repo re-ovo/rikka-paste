@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- 只暴露同步来的剪贴板图片，见 src/clipboard/android.rs -->
+  <cache-path name="clipboard" path="clipboard/" />
+</paths>

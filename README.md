@@ -1,6 +1,6 @@
 # Rikka Paste
 
-极简的局域网剪贴板同步工具（macOS / Windows），常驻托盘。
+极简的局域网剪贴板同步工具（macOS / Windows），常驻托盘。另有 Android 版，只在前台运行。
 
 - 同一局域网内、配对码相同的设备通过 mDNS 自动发现，复制的文本和图片会同步到其他设备
 - 传输使用 ChaCha20-Poly1305 加密，密钥由配对码经 Argon2 派生
@@ -11,6 +11,13 @@
 
 支持纯文本（单条上限 4 MB）和图片（单张上限 32 MB，统一以 PNG 传输，可在设置中关闭图片同步）。剪贴板里同时有文本和图片时只同步文本。
 
+### Android
+
+Android 10 起系统不允许后台应用读取剪贴板，因此 Android 版不会自动发送：
+
+- 应用打开时，其他设备复制的内容会自动写入本机剪贴板
+- 本机的内容需要在应用里点"发送"，把当前剪贴板发给已配对的设备
+
 ## 开发
 
 ```sh
@@ -19,3 +26,10 @@ bun tauri dev
 ```
 
 首次运行时，macOS 会请求"本地网络"权限，Windows 防火墙会询问是否允许网络访问，都需要允许。
+
+Android（需要 Android SDK、NDK 和 JDK 17/21，Gradle 暂不支持更新的 JDK）：
+
+```sh
+export NDK_HOME="$ANDROID_HOME/ndk/<版本>"
+bun tauri android build --debug --target aarch64 --apk
+```

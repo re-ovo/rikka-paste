@@ -19,7 +19,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             device_id: format!("{:016x}", rand::random::<u64>()),
-            device_name: gethostname::gethostname().to_string_lossy().into_owned(),
+            device_name: default_device_name(),
             sync_key: generate_key(),
             enabled: true,
             record_history: true,
@@ -49,6 +49,37 @@ impl Config {
         }
         fs::write(path, serde_json::to_vec_pretty(self)?)
     }
+}
+
+#[cfg(not(target_os = "android"))]
+fn default_device_name() -> String {
+    gethostname::gethostname().to_string_lossy().into_owned()
+}
+
+/// Android 的 hostname 固定是 localhost，改用机型名；
+/// 不少厂商在 marketname 里给出更友好的名字（如 "Xiaomi 17 Pro"，model 则是 "25098PN5AC"）
+#[cfg(target_os = "android")]
+fn default_device_name() -> String {
+    ["ro.product.marketname", "ro.product.model"]
+        .into_iter()
+        .find_map(system_property)
+        .unwrap_or_else(|| "Android".into())
+}
+
+#[cfg(target_os = "android")]
+fn system_property(key: &str) -> Option<String> {
+    use std::ffi::{c_char, CStr, CString};
+
+    let key = CString::new(key).ok()?;
+    let mut value = [0 as c_char; libc::PROP_VALUE_MAX as usize];
+    // SAFETY: value 的长度是 PROP_VALUE_MAX，系统保证写入不超过该长度（含结尾的 NUL）
+    let len = unsafe { libc::__system_property_get(key.as_ptr(), value.as_mut_ptr()) };
+    if len <= 0 {
+        return None;
+    }
+    // SAFETY: 返回值大于 0 时 value 中是以 NUL 结尾的字符串
+    let value = unsafe { CStr::from_ptr(value.as_ptr()) };
+    Some(value.to_string_lossy().trim().to_string()).filter(|v| !v.is_empty())
 }
 
 /// 生成形如 `K7QM-2XPA` 的配对码（40 bit）

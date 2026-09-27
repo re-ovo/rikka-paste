@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Rikka Paste：Tauri 2 托盘常驻应用（macOS / Windows），在局域网内同步剪贴板的文本和图片。前端 React 19 + Tailwind 4 + Vite，包管理用 bun；核心逻辑全部在 `src-tauri/`（Rust）。代码注释、UI 文案、错误信息都用中文。
+Rikka Paste：Tauri 2 托盘常驻应用（macOS / Windows），在局域网内同步剪贴板的文本和图片；另有只在前台运行的 Android 版。前端 React 19 + Tailwind 4 + Vite，包管理用 bun；核心逻辑全部在 `src-tauri/`（Rust）。代码注释、UI 文案、错误信息都用中文。
 
 ## 常用命令
 
@@ -18,7 +18,9 @@ cargo test --manifest-path src-tauri/Cargo.toml message_roundtrip    # 单个测
 
 `clipboard/macos.rs` 的测试只在 macOS 上编译运行，`clipboard/windows.rs` 只在 Windows 上编译。
 
-发布：同步修改 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 的版本号（以及 `Cargo.lock`），然后推送 `v*` tag，`.github/workflows/release.yml` 会构建 macOS universal 和 Windows 包并创建 GitHub Release。前端的更新提示依赖 GitHub latest release 的 `tag_name` 与 app 版本比较。
+Android：`NDK_HOME="$ANDROID_HOME/ndk/<版本>" bun tauri android build --debug --target aarch64 --apk`。Gradle 需要 JDK 17/21（JDK 25 会报 `Unsupported class file major version 69`），可用 `JAVA_HOME=$(/usr/libexec/java_home -v 21)`。`src-tauri/gen/android` 是提交进仓库、手动维护的 Android 工程，不要重新 `tauri android init` 覆盖。release 包的签名读取 `gen/android/keystore.properties`（`storeFile` / `password` / `keyAlias`，不提交），没有该文件时产出的 APK 未签名。
+
+发布：同步修改 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 的版本号（以及 `Cargo.lock`），然后推送 `v*` tag，`.github/workflows/release.yml` 会构建 macOS universal 和 Windows 包并创建 GitHub Release，随后 `android` job 构建签名的 universal APK（arm64 + armv7）上传到同一个 Release。签名需要仓库 Secrets：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`。前端的更新提示依赖 GitHub latest release 的 `tag_name` 与 app 版本比较。
 
 ## 架构
 
@@ -27,9 +29,9 @@ cargo test --manifest-path src-tauri/Cargo.toml message_roundtrip    # 单个测
 `sync::Engine`（`src-tauri/src/sync.rs`）是整个应用的核心，在 `lib.rs` 的 `setup` 里启动并作为 Tauri state 管理：
 
 1. **发现**：mDNS 注册 `_rikkapaste._tcp.local.`，TXT 记录携带 `id`、`name`、`fp`（配对码派生密钥的指纹）、`v`（协议版本）。另开线程接收 browse 事件维护 `peers`。
-2. **发送**：独立线程每 300ms 轮询 `clipboard::change_count()`，变化时 `clipboard::read()`，把内容封装成消息、加密，对每个"协议版本一致且指纹一致"的 peer 各开一个 TCP 短连接发送。
+2. **发送**：（仅桌面端）独立线程每 300ms 轮询 `clipboard::change_count()`，变化时 `clipboard::read()`，把内容封装成消息、加密，对每个"协议版本一致且指纹一致"的 peer 各开一个 TCP 短连接发送。
 3. **接收**：tokio TcpListener（随机端口，通过 mDNS 公布）读帧，在 `spawn_blocking` 中解密、校验时间戳（±5 分钟）、写入本地剪贴板。
-4. **UI 同步**：每次状态变化 `emit("state-changed", Snapshot)` 推送完整快照；前端（`src/App.tsx`，单文件）只通过 `get_state` / `update_config` / `generate_key` / `copy_secret` / `open_release` / `get_autostart` / `set_autostart` 这几个命令和事件交互，不自己轮询。
+4. **UI 同步**：每次状态变化 `emit("state-changed", Snapshot)` 推送完整快照；前端（`src/App.tsx`，单文件）只通过 `get_state` / `update_config` / `generate_key` / `copy_secret` / `send_clipboard` / `open_release` / `get_autostart` / `set_autostart` 这几个命令和事件交互，不自己轮询。
 
 ### 需要跨文件理解的约束
 
@@ -40,4 +42,5 @@ cargo test --manifest-path src-tauri/Cargo.toml message_roundtrip    # 单个测
 - **新增 Tauri 命令**要加到 `lib.rs` 的 `generate_handler!`；前端需要的窗口 API 权限要加到 `src-tauri/capabilities/default.json`。
 - **开机自启**：用 `tauri-plugin-autostart`（macOS 为 LaunchAgent），状态以系统登录项为准，不存进 `Config`。自启时带 `--autostart` 参数；窗口在两份 `tauri*.conf.json` 里都是 `visible: false`，`setup` 中没有该参数时才显示。
 - **窗口/平台差异**：关闭窗口只是隐藏（同步在后台继续），macOS 使用 Accessory 激活策略不占 Dock。macOS 用 Overlay 标题栏，`tauri.windows.conf.json` 在 Windows 上关闭系统装饰，由前端 `TitleBar` 自绘。`src-tauri/Info.plist` 中的 `NSBonjourServices` 必须与 `SERVICE_TYPE` 保持一致，否则 macOS 本地网络权限下无法发现设备。
+- **Android**：系统不允许后台读剪贴板，所以没有轮询线程（`#[cfg(desktop)]`），由界面上的 `send_clipboard` 手动发送；Android 上 IPC 不经过主线程，因此窗口配置为 `create: false`，在 `setup` 里 manage Engine 之后才创建，否则前端可能在 state 就绪前调用命令；接收流程与桌面端相同。剪贴板读写通过 `gen/android/.../ClipboardPlugin.kt`（由 `clipboard/android.rs` 注册的 Tauri 插件）完成，插件调用要等主线程返回，所以碰剪贴板的命令必须是 async 并放进 `spawn_blocking`，不能在主线程同步调用。图片经缓存目录里的文件交换，写入时由 FileProvider（`res/xml/file_paths.xml` 只暴露 `cache/clipboard/`）提供 content:// URI。敏感/临时标记都映射为 `android.content.extra.IS_SENSITIVE`。`MainActivity` 持有 `MulticastLock`，否则 mDNS 收不到组播包。托盘、开机自启只在 `#[cfg(desktop)]` 下编译，前端用 UA 判断 Android 并隐藏对应选项。
 - `Cargo.toml` 对 argon2、chacha20、poly1305、sha2 等在 dev profile 下单独开了 `opt-level = 3`（64 MiB Argon2 派生和大图加解密在未优化构建下很慢），不要删掉。

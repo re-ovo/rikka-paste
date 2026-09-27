@@ -38,9 +38,13 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [autostart, setAutostart] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState("");
 
   useEffect(() => {
-    invoke<boolean>("get_autostart").then(setAutostart, (e) => setError(String(e)));
+    if (!isAndroid) {
+      invoke<boolean>("get_autostart").then(setAutostart, (e) => setError(String(e)));
+    }
     invoke<Snapshot>("get_state").then((s) => {
       setSnapshot(s);
       setName(s.config.deviceName);
@@ -83,6 +87,17 @@ function App() {
     await invoke("copy_secret", { text: key });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function sendClipboard() {
+    try {
+      await invoke("send_clipboard");
+      setSendError("");
+      setSent(true);
+      setTimeout(() => setSent(false), 1500);
+    } catch (e) {
+      setSendError(String(e));
+    }
   }
 
   const matchedCount = peers.filter((p) => p.matched).length;
@@ -139,6 +154,21 @@ function App() {
 
         <div className="mx-auto flex max-w-xl flex-col gap-4 p-4">
           <UpdateBanner />
+          {isAndroid && (
+            <Card title="剪贴板">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p>发送剪贴板</p>
+                  <p className="text-xs text-zinc-500">把本机剪贴板里的文本或图片发给配对的设备</p>
+                </div>
+                <Button primary onClick={sendClipboard}>
+                  {sent ? "已发送" : "发送"}
+                </Button>
+              </div>
+              {sendError && <p className="text-xs text-red-500">{sendError}</p>}
+              <p className="text-xs text-zinc-500">保持应用在前台，其他设备复制的内容会自动写入本机剪贴板</p>
+            </Card>
+          )}
           <Card title={`局域网设备 · ${peers.length}`}>
             {peers.length === 0 ? (
               <p className="py-2 text-zinc-500">正在查找运行 Rikka Paste 的设备…</p>
@@ -164,13 +194,15 @@ function App() {
           </Card>
 
           <Card title="选项">
-            <label className="flex cursor-pointer items-start justify-between gap-4">
-              <div>
-                <p>开机自启</p>
-                <p className="text-xs text-zinc-500">登录后在后台启动，只显示托盘图标</p>
-              </div>
-              <Switch checked={autostart} onChange={toggleAutostart} />
-            </label>
+            {!isAndroid && (
+              <label className="flex cursor-pointer items-start justify-between gap-4">
+                <div>
+                  <p>开机自启</p>
+                  <p className="text-xs text-zinc-500">登录后在后台启动，只显示托盘图标</p>
+                </div>
+                <Switch checked={autostart} onChange={toggleAutostart} />
+              </label>
+            )}
             <label className="flex cursor-pointer items-start justify-between gap-4">
               <div>
                 <p>同步图片</p>
@@ -182,7 +214,9 @@ function App() {
               <div>
                 <p>记入剪贴板历史</p>
                 <p className="text-xs text-zinc-500">
-                  关闭后，从其他设备同步来的内容不会出现在 Maccy / Win+V 等剪贴板历史中
+                  {isAndroid
+                    ? "关闭后，从其他设备同步来的内容会标记为敏感，输入法不会记入剪贴板历史"
+                    : "关闭后，从其他设备同步来的内容不会出现在 Maccy / Win+V 等剪贴板历史中"}
                 </p>
               </div>
               <Switch checked={config.recordHistory} onChange={(recordHistory) => apply({ recordHistory })} />
@@ -287,10 +321,12 @@ function UpdateBanner() {
 }
 
 const isMac = navigator.userAgent.includes("Mac");
+const isAndroid = navigator.userAgent.includes("Android");
 
 /// 沉浸式标题栏：透明的拖动区叠在内容上方，滚动后才出现背景。
 /// macOS 由系统绘制红绿灯，Windows 自绘最小化/关闭按钮。
 function TitleBar({ scrolled }: { scrolled: boolean }) {
+  if (isAndroid) return null;
   return (
     <header
       data-tauri-drag-region

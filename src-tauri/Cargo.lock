@@ -3192,6 +3192,7 @@ dependencies = [
  "clipboard-win",
  "gethostname",
  "image",
+ "libc",
  "mdns-sd",
  "objc2",
  "objc2-app-kit",

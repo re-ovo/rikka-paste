@@ -33,6 +33,7 @@ pub const STATE_EVENT: &str = "state-changed";
 const SERVICE_TYPE: &str = "_rikkapaste._tcp.local.";
 /// 消息格式的版本，通过 mDNS 公布；版本不同的设备互不发送。未公布版本的旧客户端视为 "1"
 const PROTOCOL_VERSION: &str = "2";
+#[cfg(desktop)]
 const POLL_INTERVAL: Duration = Duration::from_millis(300);
 const IO_TIMEOUT: Duration = Duration::from_secs(3);
 /// 传输正文时按这个最低吞吐（字节/秒）放宽超时，避免大内容在慢速 Wi-Fi 下被截断
@@ -156,8 +157,12 @@ impl Engine {
                 e.on_mdns_event(event);
             }
         });
-        let e = engine.clone();
-        thread::spawn(move || e.watch_clipboard());
+        // Android 只有前台且有焦点的应用才能读剪贴板，改由用户在界面上手动发送
+        #[cfg(desktop)]
+        {
+            let e = engine.clone();
+            thread::spawn(move || e.watch_clipboard());
+        }
 
         Ok(engine)
     }
@@ -321,6 +326,7 @@ impl Engine {
         self.notify();
     }
 
+    #[cfg(desktop)]
     fn watch_clipboard(self: Arc<Self>) {
         let mut last_count = clipboard::change_count();
         loop {
@@ -331,40 +337,53 @@ impl Engine {
             }
             match clipboard::read() {
                 clipboard::Read::Busy => continue,
-                clipboard::Read::Content(content) => self.on_local_content(content),
+                clipboard::Read::Content(content) => {
+                    // 自动同步时，暂停、没有设备等情况都静默跳过
+                    let _ = self.send_content(content, false);
+                }
                 clipboard::Read::Sensitive | clipboard::Read::Empty => {}
             }
             last_count = count;
         }
     }
 
-    fn on_local_content(self: &Arc<Self>, content: Content) {
+    /// 读取本机剪贴板并立即发送，不跳过刚同步过的内容
+    pub fn send_clipboard(self: &Arc<Self>) -> Result<(), String> {
+        match clipboard::read() {
+            clipboard::Read::Content(content) => self.send_content(content, true),
+            clipboard::Read::Sensitive => Err("剪贴板内容带有敏感标记，不会发送".into()),
+            clipboard::Read::Empty => Err("剪贴板里没有文本或图片".into()),
+            clipboard::Read::Busy => Err("剪贴板被其他程序占用，请稍后重试".into()),
+        }
+    }
+
+    /// 加密后发给所有配对设备。`manual` 为 false 时（自动同步）跳过与上次同步相同的内容
+    fn send_content(self: &Arc<Self>, content: Content, manual: bool) -> Result<(), String> {
         let body = content.as_bytes();
         if body.is_empty() {
-            return;
+            return Err("剪贴板里没有文本或图片".into());
         }
         let (kind, limit) = match content {
             Content::Text(_) => (Kind::Text, MAX_TEXT_LEN),
             Content::Png(_) => (Kind::Png, MAX_IMAGE_LEN),
         };
         if body.len() > limit {
-            self.push_log(
-                false,
-                "-".into(),
-                preview(&content),
-                Some(format!("超过 {} MB，已跳过", limit >> 20)),
-            );
-            return;
+            let error = format!("超过 {} MB，已跳过", limit >> 20);
+            self.push_log(false, "-".into(), preview(&content), Some(error.clone()));
+            return Err(error);
         }
         let hash = crypto::sha256(body);
         let (cipher, header, targets) = {
             let mut inner = self.lock();
             let config = &inner.config;
-            if !config.enabled
-                || (matches!(kind, Kind::Png) && !config.sync_images)
-                || inner.last_hash == Some(hash)
-            {
-                return;
+            if !config.enabled {
+                return Err("同步已暂停".into());
+            }
+            if matches!(kind, Kind::Png) && !config.sync_images {
+                return Err("已关闭图片同步".into());
+            }
+            if !manual && inner.last_hash == Some(hash) {
+                return Ok(());
             }
             inner.last_hash = Some(hash);
             let fingerprint = &inner.cipher.fingerprint;
@@ -375,7 +394,7 @@ impl Engine {
                 .map(|p| (p.name.clone(), p.addrs.clone()))
                 .collect();
             if targets.is_empty() {
-                return;
+                return Err("没有配对的设备".into());
             }
             let header = Header {
                 from: inner.config.device_id.clone(),
@@ -395,6 +414,7 @@ impl Engine {
                 engine.push_log(false, name, preview, error);
             });
         }
+        Ok(())
     }
 
     async fn serve(self: Arc<Self>, listener: TcpListener) {

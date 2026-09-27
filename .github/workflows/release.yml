@@ -49,3 +49,69 @@ jobs:
           releaseName: Rikka Paste ${{ github.ref_name }}
           generateReleaseNotes: true
           uploadWorkflowArtifacts: true
+
+  android:
+    # tag 构建时 Release 由上面的 tauri-action 创建，等它建好再上传 APK
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+
+      # Gradle 8 不支持 JDK 25
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: bun install --frozen-lockfile
+
+      # 签名密钥一旦更换，已安装的用户就无法覆盖升级
+      - name: 写入签名配置
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          password=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          EOF
+
+      # runner 自带 Android SDK 和 NDK
+      - name: 构建 APK
+        run: NDK_HOME="$ANDROID_NDK_LATEST_HOME" bun tauri android build --apk --target aarch64 --target armv7
+
+      - name: 整理产物
+        id: apk
+        run: |
+          path="Rikka.Paste_$(jq -r .version src-tauri/tauri.conf.json)_android.apk"
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk "$path"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: 上传到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "${{ steps.apk.outputs.path }}" --clobber
+
+      - uses: actions/upload-artifact@v5
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        with:
+          name: android
+          path: ${{ steps.apk.outputs.path }}
